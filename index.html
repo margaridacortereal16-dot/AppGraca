@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraçaMed - Alarme de Medicamentos</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel standalone for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .btn-senior {
+            min-height: 3.5rem;
+            touch-action: manipulation;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        .alarm-shake {
+            animation: pulse-ring 1.8s infinite ease-in-out;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const DEFAULT_MEDICATIONS = [
+            {
+                id: 'omeprazol-1',
+                name: 'Omeprazol Generis 10 mg',
+                type: 'capsule', // capsule, pill, cream, liquid
+                typeLabel: 'Cápsulas',
+                icon: 'fa-capsules',
+                color: 'bg-emerald-600',
+                lightColor: 'bg-emerald-50 text-emerald-900 border-emerald-300',
+                times: ['08:00'],
+                instruction: '1 cápsula em jejum (30 min antes do pequeno-almoço)',
+                warning: 'Tomar enquanto durar o tratamento com Lepicortinolo',
+                image: 'https://placehold.co/400x250/10b981/ffffff?text=Omeprazol+Generis+10mg+(Verde/Branco)',
+                calculateDose: (dayNum) => {
+                    if (dayNum <= 18) {
+                        return { dose: '1 Cápsula em jejum', active: true, text: ' Tomar 30 min antes do pequeno-almoço.' };
+                    }
+                    return { dose: 'Tratamento Concluído', active: false, text: 'Já não necessita de tomar hoje.' };
+                }
+            },
+            {
+                id: 'lepicortinolo-1',
+                name: 'Lepicortinolo 20 mg (Prednisolona)',
+                type: 'pill',
+                typeLabel: 'Comprimidos',
+                icon: 'fa-pills',
+                color: 'bg-red-600',
+                lightColor: 'bg-red-50 text-red-900 border-red-300',
+                times: ['08:30'],
+                instruction: 'Tomar ao pequeno-almoço conforme a fase de desmame',
+                warning: 'Atenção à quantidade reduzida conforme os dias de tratamento',
+                image: 'https://placehold.co/400x250/ef4444/ffffff?text=Lepicortinolo+20mg+(Branco/Vermelho)',
+                calculateDose: (dayNum) => {
+                    if (dayNum >= 1 && dayNum <= 6) {
+                        return { dose: '1 Comprimido Inteiro', active: true, text: 'Fase 1 (Dias 1 a 6): 1 comprimido ao pequeno-almoço.' };
+                    } else if (dayNum >= 7 && dayNum <= 12) {
+                        return { dose: 'MEIO Comprimido (1/2)', active: true, text: 'Fase 2 (Dias 7 a 12): Partir ao meio. Tomar 1/2 comprimido.' };
+                    } else if (dayNum >= 13 && dayNum <= 18) {
+                        return { dose: 'UM QUARTO Comprimido (1/4)', active: true, text: 'Fase 3 (Dias 13 a 18): Partir em 4 partes. Tomar 1/4 comprimido.' };
+                    }
+                    return { dose: 'Tratamento Concluído', active: false, text: 'O período de desmame já terminou.' };
+                }
+            },
+            {
+                id: 'bilaxten-1',
+                name: 'Bilaxten 20 mg (Bilastina)',
+                type: 'pill',
+                typeLabel: 'Comprimidos',
+                icon: 'fa-tablets',
+                color: 'bg-blue-600',
+                lightColor: 'bg-blue-50 text-blue-900 border-blue-300',
+                times: ['08:00', '16:00', '00:00'],
+                instruction: '1 comprimido de 8 em 8 horas',
+                warning: 'Apenas enquanto houver comichão',
+                image: 'https://placehold.co/400x250/2563eb/ffffff?text=Bilaxten+20mg+(Branco/Azul)',
+                calculateDose: (dayNum) => {
+                    return { dose: '1 Comprimido', active: true, text: 'Tomar de 8 em 8 horas apenas se mantiver comichão.' };
+                }
+            },
+            {
+                id: 'advantan-1',
+                name: 'Advantan 1 mg/g (Creme)',
+                type: 'cream',
+                typeLabel: 'Emulsão / Creme',
+                icon: 'fa-pump-medical',
+                color: 'bg-sky-600',
+                lightColor: 'bg-sky-50 text-sky-900 border-sky-300',
+                times: ['09:00', '21:00'],
+                instruction: 'Aplicar suavemente nas lesões de pele',
+                warning: '⚠️ ATENÇÃO: NÃO APLICAR NO ROSTO!',
+                image: 'https://placehold.co/400x250/0284c7/ffffff?text=Advantan+Creme+(Branco/Azul+Claro)',
+                calculateDose: (dayNum, timeIndex) => {
+                    if (dayNum >= 1 && dayNum <= 7) {
+                        return { dose: 'Aplicar no corpo (2x ao dia)', active: true, text: 'Primeiros 7 dias: Aplicação de manhã e à noite nas feridas.' };
+                    } else if (dayNum >= 8 && dayNum <= 14) {
+                        if (timeIndex === 1) {
+                            return { dose: 'Não necessário à noite', active: false, text: 'Fase 2 (Seguintes 7 dias): Apenas 1 aplicação por dia (de manhã).' };
+                        }
+                        return { dose: 'Aplicar no corpo (1x ao dia)', active: true, text: 'Fase 2: Aplicar apenas 1 vez ao dia de manhã nas feridas.' };
+                    }
+                    return { dose: 'Tratamento Concluído', active: false, text: 'Tratamento de 14 dias concluído.' };
+                }
+            }
+        ];
+
+        function App() {
+            const [startDate, setStartDate] = React.useState(() => {
+                const saved = localStorage.getItem('gracamed_start_date');
+                return saved || new Date().toISOString().split('T')[0];
+            });
+
+            const [medications, setMedications] = React.useState(() => {
+                const saved = localStorage.getItem('gracamed_meds');
+                return saved ? JSON.parse(saved) : DEFAULT_MEDICATIONS;
+            });
+
+            const [takenLog, setTakenLog] = React.useState(() => {
+                const saved = localStorage.getItem('gracamed_taken_log');
+                return saved ? JSON.parse(saved) : {};
+            });
+
+            const [activeAlarm, setActiveAlarm] = React.useState(null);
+            const [toastMessage, setToastMessage] = React.useState('');
+            const [activeTab, setActiveTab] = React.useState('today'); // today, meds, add, share
+            const [editingMed, setEditingMed] = React.useState(null);
+
+            // Save state to localStorage
+            React.useEffect(() => {
+                localStorage.setItem('gracamed_start_date', startDate);
+            }, [startDate]);
+
+            React.useEffect(() => {
+                localStorage.setItem('gracamed_taken_log', JSON.stringify(takenLog));
+            }, [takenLog]);
+
+            // Calculate treatment day (Day 1, Day 2, etc.)
+            const getTreatmentDay = () => {
+                const start = new Date(startDate);
+                const today = new Date();
+                start.setHours(0,0,0,0);
+                today.setHours(0,0,0,0);
+                const diffTime = today.getTime() - start.getTime();
+                const diffDays = Math.floor(diffTime / (1000 * 3600 * 24)) + 1;
+                return diffDays > 0 ? diffDays : 1;
+            };
+
+            const treatmentDay = getTreatmentDay();
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            // Helper to speak text out loud for accessibility
+            const speakText = (text) => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'pt-PT';
+                    utterance.rate = 0.85; // Slightly slower for clarity
+                    utterance.pitch = 1.0;
+                    window.speechSynthesis.speak(utterance);
+                }
+            };
+
+            // Play audio chime for alarm
+            const playAlarmAudio = () => {
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+                    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2); // A5
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.8);
+                } catch(e) {
+                    console.log('Audio error:', e);
+                }
+            };
+
+            const showToast = (msg) => {
+                setToastMessage(msg);
+                setTimeout(() => setToastMessage(''), 4000);
+            };
+
+            // Trigger alarm modal manually or by simulation
+            const triggerAlarm = (med, timeStr, timeIndex = 0) => {
+                const dayNum = treatmentDay;
+                const doseInfo = med.calculateDose ? med.calculateDose(dayNum, timeIndex) : { dose: '1 toma', text: med.instruction };
+                
+                playAlarmAudio();
+                const alarmData = {
+                    med,
+                    timeStr,
+                    doseInfo,
+                    dayNum
+                };
+                setActiveAlarm(alarmData);
+
+                // Voice announcement for accessibility
+                const announcement = `Atenção Graça! Está na hora do seu medicamento ${med.name}. Quantidade: ${doseInfo.dose}. ${med.warning || ''}`;
+                speakText(announcement);
+            };
+
+            // Toggle medicine taken status
+            const handleToggleTaken = (medId, timeSlot) => {
+                const key = `${todayStr}_${medId}_${timeSlot}`;
+                const newState = !takenLog[key];
+                
+                setTakenLog(prev => ({
+                    ...prev,
+                    [key]: newState
+                }));
+
+                if (newState) {
+                    showToast('✅ Medicamento marcado como tomado com sucesso!');
+                    speakText('Muito bem, Graça! Registado como tomado.');
+                }
+            };
+
+            // Calculate daily statistics
+            const getDailyProgress = () => {
+                let total = 0;
+                let done = 0;
+
+                medications.forEach(med => {
+                    med.times.forEach((timeStr, idx) => {
+                        const doseInfo = med.calculateDose ? med.calculateDose(treatmentDay, idx) : { active: true };
+                        if (doseInfo.active !== false) {
+                            total++;
+                            if (takenLog[`${todayStr}_${med.id}_${timeStr}`]) {
+                                done++;
+                            }
+                        }
+                    });
+                });
+
+                return { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 };
+            };
+
+            const progress = getDailyProgress();
+
+            // Share functionality (Copies to clipboard or opens Web Share)
+            const handleShareSchedule = () => {
+                let shareContent = `📋 *PLANO DE MEDICAÇÃO DA GRAÇA*\n`;
+                shareContent += `🗓️ Dia do Tratamento: Dia ${treatmentDay} (Início: ${startDate})\n`;
+                shareContent += `------------------------------------\n`;
+
+                medications.forEach(med => {
+                    shareContent += `\n💊 *${med.name}*\n`;
+                    med.times.forEach((time, idx) => {
+                        const doseInfo = med.calculateDose ? med.calculateDose(treatmentDay, idx) : { dose: med.instruction, active: true };
+                        const isTaken = takenLog[`${todayStr}_${med.id}_${time}`] ? '✅ [TOMADO]' : '⏰ [PENDENTE]';
+                        if (doseInfo.active !== false) {
+                            shareContent += `   • ${time} hrs - ${doseInfo.dose} ${isTaken}\n`;
+                        }
+                    });
+                    if (med.warning) shareContent += `   ⚠️ Nota: ${med.warning}\n`;
+                });
+
+                shareContent += `\n------------------------------------\nEnviado através da app GraçaMed 💙`;
+
+                if (navigator.share) {
+                    navigator.share({
+                        title: 'Plano de Medicação da Graça',
+                        text: shareContent
+                    }).catch(() => {
+                        copyToClipboard(shareContent);
+                    });
+                } else {
+                    copyToClipboard(shareContent);
+                }
+            };
+
+            const copyToClipboard = (text) => {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast('📋 Plano copiado para a área de transferência! Pode colar no WhatsApp.');
+                    speakText('Plano de medicação copiado!');
+                } catch (err) {
+                    showToast('Não foi possível copiar automaticamente.');
+                }
+                document.body.removeChild(textarea);
+            };
+
+            return (
+                <div className="max-w-md mx-auto min-h-screen bg-slate-50 flex flex-col shadow-2xl relative border-x border-slate-200 pb-20">
+                    
+                    {/* Header */}
+                    <header className="bg-gradient-to-r from-blue-700 via-sky-700 to-blue-800 text-white p-5 rounded-b-3xl shadow-lg sticky top-0 z-30">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-2xl bg-white text-blue-800 flex items-center justify-center text-2xl font-black shadow-inner">
+                                    <i className="fa-solid fa-pills text-blue-600"></i>
+                                </div>
+                                <div>
+                                    <h1 className="text-2xl font-black tracking-tight leading-tight">GraçaMed</h1>
+                                    <p className="text-xs text-sky-100 font-medium">Alarme de Medicamentos da Graça</p>
+                                </div>
+                            </div>
+                            
+                            <button 
+                                onClick={handleShareSchedule}
+                                title="Partilhar Plano com a Família"
+                                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold px-3.5 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+                            >
+                                <i className="fa-solid fa-share-nodes text-base"></i>
+                                <span>Partilhar</span>
+                            </button>
+                        </div>
+
+                        {/* Date and Progress Bar */}
+                        <div className="mt-4 bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/20">
+                            <div className="flex justify-between items-center text-xs font-bold mb-1.5">
+                                <span className="text-sky-100">Progresso de Hoje:</span>
+                                <span className="bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full text-[11px] font-black">
+                                    {progress.done} de {progress.total} tomados ({progress.percent}%)
+                                </span>
+                            </div>
+                            <div className="w-full bg-blue-950/40 rounded-full h-3.5 overflow-hidden p-0.5 border border-white/10">
+                                <div 
+                                    className="bg-emerald-400 h-full transition-all duration-500 rounded-full" 
+                                    style={{ width: `${progress.percent}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Toast Notification */}
+                    {toastMessage && (
+                        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white font-bold text-sm px-5 py-3 rounded-2xl shadow-2xl border-2 border-amber-400 flex items-center gap-3 animate-bounce max-w-[90%]">
+                            <i className="fa-solid fa-circle-info text-amber-400 text-lg"></i>
+                            <span>{toastMessage}</span>
+                        </div>
+                    )}
+
+                    {/* Main Content Body */}
+                    <main className="p-4 flex-1 space-y-5">
+                        
+                        {/* Start Date & Day Tracker Banner */}
+                        <section className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black">
+                                        <i className="fa-solid fa-calendar-day"></i>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xs uppercase font-extrabold text-slate-400 tracking-wider">Início do Tratamento</h2>
+                                        <p className="text-base font-black text-blue-900">Dia {treatmentDay} do Tratamento</p>
+                                    </div>
+                                </div>
+                                <input 
+                                    type="date" 
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="bg-slate-100 border-2 border-slate-300 font-bold text-xs p-2 rounded-xl text-slate-700 focus:outline-none focus:border-blue-600"
+                                />
+                            </div>
+                            <p className="text-xs text-slate-500 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                <i className="fa-solid fa-circle-info text-blue-500 mr-1"></i>
+                                Doses ajustadas automaticamente com base no primeiro dia ({startDate}).
+                            </p>
+                        </section>
+
+                        {/* Navigation Tabs */}
+                        <div className="grid grid-cols-2 gap-2 bg-slate-200/80 p-1.5 rounded-2xl font-black text-sm">
+                            <button 
+                                onClick={() => setActiveTab('today')}
+                                className={`py-3 rounded-xl transition-all flex items-center justify-center gap-2 ${activeTab === 'today' ? 'bg-white text-blue-700 shadow-md' : 'text-slate-600 hover:text-slate-900'}`}
+                            >
+                                <i className="fa-solid fa-clock-rotate-left"></i>
+                                Doses de Hoje
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('meds')}
+                                className={`py-3 rounded-xl transition-all flex items-center justify-center gap-2 ${activeTab === 'meds' ? 'bg-white text-blue-700 shadow-md' : 'text-slate-600 hover:text-slate-900'}`}
+                            >
+                                <i className="fa-solid fa-boxes-packing"></i>
+                                Medicamentos
+                            </button>
+                        </div>
+
+                        {/* TAB 1: TODAY'S DOSES */}
+                        {activeTab === 'today' && (
+                            <section className="space-y-4">
+                                {medications.map((med) => (
+                                    <div key={med.id} className="bg-white rounded-3xl p-4 shadow-sm border border-slate-200 space-y-3">
+                                        <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-12 h-12 rounded-2xl ${med.color} text-white flex items-center justify-center text-xl shadow-md`}>
+                                                    <i className={`fa-solid ${med.icon}`}></i>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-extrabold text-slate-900 text-lg leading-tight">{med.name}</h3>
+                                                    <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md inline-block mt-0.5">
+                                                        {med.typeLabel}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Times & Specific Doses for Today */}
+                                        <div className="space-y-2.5">
+                                            {med.times.map((timeStr, idx) => {
+                                                const key = `${todayStr}_${med.id}_${timeStr}`;
+                                                const isTaken = takenLog[key];
+                                                const doseInfo = med.calculateDose ? med.calculateDose(treatmentDay, idx) : { dose: med.instruction, active: true, text: med.instruction };
+
+                                                if (doseInfo.active === false) {
+                                                    return null; // Skip if no dosage required for current phase
+                                                }
+
+                                                return (
+                                                    <div 
+                                                        key={idx}
+                                                        className={`p-3.5 rounded-2xl border-2 flex items-center justify-between gap-3 transition-all ${isTaken ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}
+                                                    >
+                                                        <div className="space-y-1 flex-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="bg-slate-900 text-amber-300 font-black text-sm px-2.5 py-1 rounded-xl shadow-inner">
+                                                                    <i className="fa-regular fa-clock mr-1 text-xs"></i>
+                                                                    {timeStr}
+                                                                </span>
+                                                                <span className={`text-xs font-black px-2.5 py-1 rounded-xl ${isTaken ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-100 text-amber-900'}`}>
+                                                                    {isTaken ? '✅ TOMADO' : '⏰ PENDENTE'}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-sm font-extrabold text-slate-800 mt-1">
+                                                                Dose: <span className="text-blue-700 underline">{doseInfo.dose}</span>
+                                                            </p>
+                                                            {doseInfo.text && (
+                                                                <p className="text-xs text-slate-500 font-medium">
+                                                                    {doseInfo.text}
+                                                                </p>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Action Buttons */}
+                                                        <div className="flex flex-col gap-2">
+                                                            <button 
+                                                                onClick={() => handleToggleTaken(med.id, timeStr)}
+                                                                className={`btn-senior px-4 py-2 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all ${
+                                                                    isTaken 
+                                                                        ? 'bg-slate-300 text-slate-700 hover:bg-slate-400' 
+                                                                        : 'bg-emerald-600 text-white hover:bg-emerald-700 border-b-4 border-emerald-800'
+                                                                }`}
+                                                            >
+                                                                <i className={`fa-solid ${isTaken ? 'fa-rotate-left' : 'fa-check'}`}></i>
+                                                                <span>{isTaken ? 'Anular' : 'Tomei'}</span>
+                                                            </button>
+
+                                                            <button 
+                                                                onClick={() => triggerAlarm(med, timeStr, idx)}
+                                                                className="bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95"
+                                                                title="Simular / Testar Alarme"
+                                                            >
+                                                                <i className="fa-solid fa-bell text-amber-600"></i>
+                                                                <span>Alarme</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {med.warning && (
+                                            <div className="p-2.5 bg-amber-50 rounded-2xl border border-amber-200 text-xs font-bold text-amber-900 flex items-center gap-2">
+                                                <i className="fa-solid fa-triangle-exclamation text-amber-600 text-base flex-shrink-0"></i>
+                                                <span>{med.warning}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </section>
+                        )}
+
+                        {/* TAB 2: MEDICATIONS LIST & BOX PHOTOS */}
+                        {activeTab === 'meds' && (
+                            <section className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="font-black text-slate-800 text-lg">Caixas de Medicamentos</h3>
+                                    <button 
+                                        onClick={() => {
+                                            setEditingMed({
+                                                id: 'custom-' + Date.now(),
+                                                name: '',
+                                                type: 'pill',
+                                                typeLabel: 'Comprimidos',
+                                                icon: 'fa-pills',
+                                                color: 'bg-indigo-600',
+                                                times: ['08:00'],
+                                                instruction: '',
+                                                warning: '',
+                                                image: 'https://placehold.co/400x250/4f46e5/ffffff?text=Novo+Medicamento'
+                                            });
+                                            setActiveTab('add');
+                                        }}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white font-black px-4 py-2 rounded-2xl text-xs flex items-center gap-1.5 shadow-md active:scale-95"
+                                    >
+                                        <i className="fa-solid fa-plus text-base"></i>
+                                        <span>Adicionar</span>
+                                    </button>
+                                </div>
+
+                                {medications.map((med) => (
+                                    <div key={med.id} className="bg-white rounded-3xl p-4 shadow-sm border border-slate-200 space-y-3">
+                                        <div className="rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 relative group">
+                                            <img 
+                                                src={med.image} 
+                                                alt={med.name} 
+                                                className="w-full h-44 object-cover"
+                                                onError={(e) => {
+                                                    e.target.src = 'https://placehold.co/400x250/64748b/ffffff?text=Embalagem+do+Medicamento';
+                                                }}
+                                            />
+                                            <div className="absolute top-2 right-2 bg-slate-900/80 backdrop-blur-md text-white font-extrabold text-xs px-3 py-1.5 rounded-xl shadow">
+                                                Embalagem Oficial
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <h4 className="font-black text-slate-900 text-lg">{med.name}</h4>
+                                            <p className="text-xs font-bold text-slate-500 mt-0.5">{med.instruction}</p>
+                                        </div>
+
+                                        <div className="bg-slate-50 p-3 rounded-2xl space-y-1 text-xs">
+                                            <p className="font-bold text-slate-700">
+                                                <i className="fa-solid fa-clock text-blue-600 mr-1.5"></i> 
+                                                Horários: <span className="font-black text-slate-900">{med.times.join(', ')}</span>
+                                            </p>
+                                            {med.warning && (
+                                                <p className="font-bold text-amber-700">
+                                                    <i className="fa-solid fa-triangle-exclamation text-amber-500 mr-1.5"></i>
+                                                    {med.warning}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <button 
+                                            onClick={() => triggerAlarm(med, med.times[0] || '08:00')}
+                                            className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold py-3 rounded-2xl text-xs flex items-center justify-center gap-2 border border-blue-200 btn-senior"
+                                        >
+                                            <i className="fa-solid fa-eye text-base"></i>
+                                            Visualizar Alerta Visual & Voz
+                                        </button>
+                                    </div>
+                                ))}
+                            </section>
+                        )}
+
+                        {/* TAB 3: ADD/EDIT FORM (FOR CAREGIVER / FAMILY) */}
+                        {activeTab === 'add' && editingMed && (
+                            <section className="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 space-y-4">
+                                <div className="flex justify-between items-center border-b pb-3">
+                                    <h3 className="font-black text-slate-900 text-lg">Adicionar Medicamento</h3>
+                                    <button 
+                                        onClick={() => setActiveTab('meds')}
+                                        className="text-slate-400 hover:text-slate-600 text-xl font-bold p-1"
+                                    >
+                                        <i className="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-black text-slate-700 uppercase mb-1">Nome do Medicamento</label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Ex: Paracetamol 500 mg"
+                                            value={editingMed.name}
+                                            onChange={(e) => setEditingMed({...editingMed, name: e.target.value})}
+                                            className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-sm focus:border-blue-600 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-black text-slate-700 uppercase mb-1">Tipo de Apresentação</label>
+                                        <select 
+                                            value={editingMed.type}
+                                            onChange={(e) => {
+                                                const type = e.target.value;
+                                                let icon = 'fa-pills';
+                                                let label = 'Comprimidos';
+                                                if (type === 'capsule') { icon = 'fa-capsules'; label = 'Cápsulas'; }
+                                                if (type === 'cream') { icon = 'fa-pump-medical'; label = 'Creme / Pomada'; }
+                                                if (type === 'liquid') { icon = 'fa-bottle-droplet'; label = 'Xarope / Gotas'; }
+                                                setEditingMed({...editingMed, type, icon, typeLabel: label});
+                                            }}
+                                            className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-sm focus:border-blue-600 focus:outline-none"
+                                        >
+                                            <option value="pill">Comprimidos</option>
+                                            <option value="capsule">Cápsulas</option>
+                                            <option value="cream">Creme / Emulsão</option>
+                                            <option value="liquid">Xarope / Gotas</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-black text-slate-700 uppercase mb-1">Instruções de Posologia</label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Ex: 1 comprimido após as refeições"
+                                            value={editingMed.instruction}
+                                            onChange={(e) => setEditingMed({...editingMed, instruction: e.target.value})}
+                                            className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-sm focus:border-blue-600 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-black text-slate-700 uppercase mb-1">Avisos / Alertas (Opcional)</label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Ex: Não tomar em jejum"
+                                            value={editingMed.warning}
+                                            onChange={(e) => setEditingMed({...editingMed, warning: e.target.value})}
+                                            className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-sm focus:border-blue-600 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-black text-slate-700 uppercase mb-1">URL da Foto da Caixa</label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="https://exemplo.com/foto.jpg"
+                                            value={editingMed.image}
+                                            onChange={(e) => setEditingMed({...editingMed, image: e.target.value})}
+                                            className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-bold text-sm focus:border-blue-600 focus:outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                <button 
+                                    onClick={() => {
+                                        if (!editingMed.name) {
+                                            showToast('⚠️ Escreva o nome do medicamento.');
+                                            return;
+                                        }
+                                        setMedications([...medications, editingMed]);
+                                        setActiveTab('meds');
+                                        showToast('✅ Medicamento adicionado com sucesso!');
+                                        speakText('Novo medicamento guardado com sucesso.');
+                                    }}
+                                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-2xl shadow-lg border-b-4 border-emerald-800 btn-senior text-base flex items-center justify-center gap-2 mt-4"
+                                >
+                                    <i className="fa-solid fa-floppy-disk text-xl"></i>
+                                    Guardar Medicamento
+                                </button>
+                            </section>
+                        )}
+
+                        {/* Support Card for Graça */}
+                        <section className="bg-emerald-50 border-2 border-emerald-300 p-4 rounded-3xl flex items-center justify-between shadow-sm">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-xl font-bold shadow">
+                                    <i className="fa-solid fa-heart-pulse"></i>
+                                </div>
+                                <div>
+                                    <h4 className="font-black text-emerald-950 text-base">Dúvidas com a Medicação?</h4>
+                                    <p className="text-xs text-emerald-800 font-medium">Ligue para a família ou apoio</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    showToast('📞 A ligar para o apoio familiar da Graça...');
+                                    speakText('A ligar para o contacto da família.');
+                                }} 
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-3 rounded-2xl text-xs shadow-md flex items-center gap-2 btn-senior active:scale-95 transition-all"
+                            >
+                                <i className="fa-solid fa-phone text-base"></i>
+                                <span>Ligar</span>
+                            </button>
+                        </section>
+
+                    </main>
+
+                    {}
+                    {activeAlarm && (
+                        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md p-4 flex items-center justify-center animate-fade-in overflow-y-auto">
+                            <div className="bg-white border-4 border-red-500 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 alarm-shake relative">
+                                
+                                {/* Header with animated bell */}
+                                <div className="text-center space-y-2">
+                                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-100 text-red-600 text-4xl pulse-ring border-4 border-red-500 shadow-lg">
+                                        <i className="fa-solid fa-bell"></i>
+                                    </div>
+                                    <h2 className="text-2xl font-black text-red-600 uppercase tracking-tight">
+                                        🚨 HORA DO MEDICAMENTO!
+                                    </h2>
+                                    <p className="text-xs font-extrabold text-slate-500">
+                                        Horário Agendado: <span className="text-slate-900 bg-amber-200 px-2.5 py-1 rounded-lg text-sm">{activeAlarm.timeStr}</span>
+                                    </p>
+                                </div>
+
+                                {/* Medicine Details */}
+                                <div className="bg-slate-50 border-2 border-slate-200 rounded-3xl p-4 text-center space-y-3">
+                                    <h3 className="text-2xl font-black text-slate-900 leading-tight">
+                                        {activeAlarm.med.name}
+                                    </h3>
+
+                                    {/* Calculated Exact Dose Badge */}
+                                    <div className="bg-amber-300 border-2 border-amber-500 text-slate-950 p-3 rounded-2xl shadow-inner">
+                                        <span className="text-xs uppercase font-black tracking-wider text-slate-700 block">Quantidade a tomar agora:</span>
+                                        <span className="text-xl font-black text-slate-950 block mt-0.5">
+                                            {activeAlarm.doseInfo.dose}
+                                        </span>
+                                    </div>
+
+                                    {/* Box Photo Preview */}
+                                    <div className="rounded-2xl overflow-hidden border-2 border-slate-300 bg-white">
+                                        <img 
+                                            src={activeAlarm.med.image} 
+                                            alt={activeAlarm.med.name} 
+                                            className="w-full h-48 object-cover"
+                                            onError={(e) => {
+                                                e.target.src = 'https://placehold.co/400x250/64748b/ffffff?text=Embalagem+do+Medicamento';
+                                            }}
+                                        />
+                                    </div>
+
+                                    {/* Warnings / Specific Instructions */}
+                                    {activeAlarm.med.warning && (
+                                        <div className="bg-red-100 border-2 border-red-400 text-red-900 p-3 rounded-2xl text-xs font-black text-left flex items-start gap-2">
+                                            <i className="fa-solid fa-triangle-exclamation text-red-600 text-lg flex-shrink-0 mt-0.5"></i>
+                                            <span>{activeAlarm.med.warning}</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Large Action Confirmation Buttons */}
+                                <div className="space-y-3">
+                                    <button 
+                                        onClick={() => {
+                                            handleToggleTaken(activeAlarm.med.id, activeAlarm.timeStr);
+                                            setActiveAlarm(null);
+                                        }}
+                                        className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-lg py-5 rounded-3xl shadow-xl flex items-center justify-center gap-3 border-b-4 border-emerald-800 btn-senior transition-all"
+                                    >
+                                        <i className="fa-solid fa-circle-check text-2xl"></i>
+                                        JÁ TOMEI O MEDICAMENTO
+                                    </button>
+
+                                    <button 
+                                        onClick={() => {
+                                            setActiveAlarm(null);
+                                            speakText('Alarme adiado.');
+                                        }}
+                                        className="w-full bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 font-extrabold text-sm py-3.5 rounded-2xl flex items-center justify-center gap-2 btn-senior"
+                                    >
+                                        <i className="fa-solid fa-clock text-slate-600"></i>
+                                        Lembrar Mais Tarde (Adiar)
+                                    </button>
+                                </div>
+
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
